@@ -29,9 +29,6 @@ public class Win32 {
 }
 "@
 
-# ═══════════════════════════════════════════════════════════
-#  Globalna zmienna predkosci
-# ═══════════════════════════════════════════════════════════
 $script:SpeedMultiplier = 1.0
 
 function Wait-Ms {
@@ -39,10 +36,6 @@ function Wait-Ms {
     $actual = [Math]::Max(10, [int]($BaseMs * $script:SpeedMultiplier))
     Start-Sleep -Milliseconds $actual
 }
-
-# ═══════════════════════════════════════════════════════════
-#  Funkcje pomocnicze
-# ═══════════════════════════════════════════════════════════
 
 function Focus-Window {
     param([IntPtr]$Handle)
@@ -92,8 +85,7 @@ function Send-F8 {
 
 function Get-ClipboardText {
     try {
-        $text = [System.Windows.Forms.Clipboard]::GetText()
-        return $text
+        return [System.Windows.Forms.Clipboard]::GetText()
     }
     catch {
         return ""
@@ -101,9 +93,7 @@ function Get-ClipboardText {
 }
 
 function Clear-ClipboardContent {
-    try {
-        [System.Windows.Forms.Clipboard]::Clear()
-    }
+    try { [System.Windows.Forms.Clipboard]::Clear() }
     catch { }
 }
 
@@ -114,29 +104,23 @@ function Trim-Lines {
         [int]$Bottom = 3
     )
     $lines = $Text -split "`r?`n"
-    if ($lines.Count -le ($Top + $Bottom)) {
-        return ""
-    }
-    $endIndex = $lines.Count - $Bottom - 1
-    $trimmed = $lines[$Top..$endIndex]
+    if ($lines.Count -le ($Top + $Bottom)) { return "" }
+    $trimmed = $lines[$Top..($lines.Count - $Bottom - 1)]
     return ($trimmed -join "`n")
 }
 
-# ═══════════════════════════════════════════════════════════
-#  Menu wyboru okna
-# ═══════════════════════════════════════════════════════════
 function Select-TargetWindow {
     $procs = Get-Process |
         Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero -and $_.MainWindowTitle } |
         Sort-Object MainWindowTitle
 
     if ($procs.Count -eq 0) {
-        Write-Host "`n  [BLAD] Nie znaleziono zadnych okien." -ForegroundColor Red
+        Write-Host "`n  [ERROR] No visible windows found." -ForegroundColor Red
         exit 1
     }
 
     Write-Host "`n$('=' * 60)"
-    Write-Host "  DOSTEPNE OKNA"
+    Write-Host "  AVAILABLE WINDOWS"
     Write-Host "$('=' * 60)"
 
     for ($i = 0; $i -lt $procs.Count; $i++) {
@@ -151,14 +135,14 @@ function Select-TargetWindow {
     Write-Host "$('=' * 60)"
 
     while ($true) {
-        $userChoice = Read-Host "`n  Podaj numer okna"
+        $userChoice = Read-Host "`n  Select window number"
         $choiceNum = 0
         if ([int]::TryParse($userChoice, [ref]$choiceNum)) {
             if ($choiceNum -ge 1 -and $choiceNum -le $procs.Count) {
                 return $procs[$choiceNum - 1]
             }
         }
-        Write-Host "  -> Wybierz liczbe 1-$($procs.Count)" -ForegroundColor Yellow
+        Write-Host "  -> Enter a number between 1-$($procs.Count)" -ForegroundColor Yellow
     }
 }
 
@@ -173,29 +157,27 @@ Write-Host "  |       Ctrl+C -> trim -> save -> F8 -> repeat    |" -ForegroundCo
 Write-Host "  +================================================+" -ForegroundColor Cyan
 Write-Host ""
 
-# ---------- konfiguracja ----------
-
 $proc = Select-TargetWindow
 $hwnd = $proc.MainWindowHandle
 
-Write-Host "`n  Wybrano: << $($proc.MainWindowTitle) >>" -ForegroundColor Green
+Write-Host "`n  Selected: << $($proc.MainWindowTitle) >>" -ForegroundColor Green
 
-$outputFile = Read-Host "  Nazwa pliku wyjsciowego [output.txt]"
+$outputFile = Read-Host "  Output file name [output.txt]"
 if ([string]::IsNullOrWhiteSpace($outputFile)) {
     $outputFile = "output.txt"
 }
 
-$useCtrlAInput = Read-Host "  Wysylac Ctrl+A przed Ctrl+C? (t/n) [n]"
+$useCtrlAInput = Read-Host "  Send Ctrl+A before Ctrl+C? (y/n) [n]"
 $useCtrlA = $useCtrlAInput -in @("t", "y", "tak", "yes")
 
-$topTrimInput = Read-Host "  Ile linii usuwac z gory?  [3]"
+$topTrimInput = Read-Host "  Lines to remove from top    [3]"
 if ([string]::IsNullOrWhiteSpace($topTrimInput)) {
     $topTrim = 3
 } else {
     $topTrim = [int]$topTrimInput
 }
 
-$bottomTrimInput = Read-Host "  Ile linii usuwac z dolu?  [3]"
+$bottomTrimInput = Read-Host "  Lines to remove from bottom [3]"
 if ([string]::IsNullOrWhiteSpace($bottomTrimInput)) {
     $bottomTrim = 3
 } else {
@@ -203,115 +185,98 @@ if ([string]::IsNullOrWhiteSpace($bottomTrimInput)) {
 }
 
 Write-Host ""
-Write-Host "  PREDKOSC - mnoznik opoznien:" -ForegroundColor Cyan
-Write-Host "    1.0 = normalna (domyslna)"
-Write-Host "    0.5 = 2x szybciej"
-Write-Host "    0.2 = 5x szybciej (agresywne)"
-Write-Host "    2.0 = 2x wolniej (wolny terminal)"
+Write-Host "  SPEED — delay multiplier:" -ForegroundColor Cyan
+Write-Host "    1.0 = normal (default)"
+Write-Host "    0.5 = 2x faster"
+Write-Host "    0.2 = 5x faster (aggressive)"
+Write-Host "    2.0 = 2x slower (slow terminal / VPN)"
 Write-Host ""
 
-$speedInput = Read-Host "  Mnoznik predkosci [1.0]"
+$speedInput = Read-Host "  Speed multiplier [1.0]"
 if ([string]::IsNullOrWhiteSpace($speedInput)) {
     $script:SpeedMultiplier = 1.0
 } else {
     $script:SpeedMultiplier = [Math]::Max(0.05, [double]$speedInput)
 }
 
-# oblicz szacowany czas na strone
-$baseTimeMs = 150 + 30 + 30 + 150 + 50 + 150 + 30 + 100 + 150 + 100
+$baseTimeMs = 150 + 30 + 30 + 150 + 50 + 150 + 30 + 100 + 150 + 100 + 200
 $actualTimeMs = [int]($baseTimeMs * $script:SpeedMultiplier)
 
 Write-Host "`n$('-' * 50)"
-Write-Host "  Plik wyjsciowy : $outputFile"
+Write-Host "  Output file    : $outputFile"
 if ($useCtrlA) {
-    Write-Host "  Ctrl+A         : TAK"
+    Write-Host "  Ctrl+A         : YES"
 } else {
-    Write-Host "  Ctrl+A         : NIE"
+    Write-Host "  Ctrl+A         : NO"
 }
-Write-Host "  Trim gora/dol  : $topTrim / $bottomTrim"
-Write-Host "  Mnoznik predk.  : $($script:SpeedMultiplier)x"
-Write-Host "  ~czas/strone   : $($actualTimeMs)ms (~$([Math]::Round($actualTimeMs/1000, 2))s)"
+Write-Host "  Trim top/bottom: $topTrim / $bottomTrim"
+Write-Host "  Speed multiplier: $($script:SpeedMultiplier)x"
+Write-Host "  ~time/page     : ${actualTimeMs}ms (~$([Math]::Round($actualTimeMs/1000, 2))s)"
 Write-Host "$('-' * 50)"
 
-Read-Host "`n  Nacisnij ENTER aby rozpoczac"
+Read-Host "`n  Press ENTER to start"
 
-# ---------- przygotowanie pliku ----------
 "" | Set-Content -Path $outputFile -Encoding UTF8 -NoNewline
 
-# ---------- petla ----------
 $page            = 0
 $totalLines      = 0
 $previousContent = $null
 $stopwatch       = [System.Diagnostics.Stopwatch]::StartNew()
 
-Write-Host "`n  [START] Rozpoczynam kopiowanie...`n" -ForegroundColor Green
+Write-Host "`n  [START] Scraping started...`n" -ForegroundColor Green
 
 try {
     while ($true) {
         $page++
         $pageTimer = [System.Diagnostics.Stopwatch]::StartNew()
 
-        # 1. Aktywuj okno
         Focus-Window -Handle $hwnd
 
-        # 2. Opcjonalnie Ctrl+A
-        if ($useCtrlA) {
-            Send-CtrlA
-        }
+        if ($useCtrlA) { Send-CtrlA }
 
-        # 3. Wyczysc schowek + Ctrl+C
         Clear-ClipboardContent
         Wait-Ms 50
 
         Send-CtrlC
         Wait-Ms 200
 
-        # 4. Odczytaj schowek
         $rawText = Get-ClipboardText
 
         if ([string]::IsNullOrWhiteSpace($rawText)) {
-            Write-Host "  [STRONA $page] Schowek pusty - STOP" -ForegroundColor Yellow
+            Write-Host "  [PAGE $page] Clipboard empty — STOP" -ForegroundColor Yellow
             break
         }
 
-        # 5. Trim
         $trimmed = Trim-Lines -Text $rawText -Top $topTrim -Bottom $bottomTrim
 
-        # 6. Pusta tresc?
         if ([string]::IsNullOrWhiteSpace($trimmed)) {
-            Write-Host "  [STRONA $page] Po przyciu linii tresc pusta - STOP" -ForegroundColor Yellow
+            Write-Host "  [PAGE $page] Content empty after trimming — STOP" -ForegroundColor Yellow
             break
         }
 
-        # 7. Duplikat?
         if ($trimmed -eq $previousContent) {
-            Write-Host "  [STRONA $page] Tresc identyczna z poprzednia - STOP" -ForegroundColor Yellow
+            Write-Host "  [PAGE $page] Duplicate content detected — STOP" -ForegroundColor Yellow
             break
         }
         $previousContent = $trimmed
 
-        # 8. Dopisz do pliku
         Add-Content -Path $outputFile -Value $trimmed -Encoding UTF8
 
         $lineCount   = ($trimmed -split "`n").Count
         $totalLines += $lineCount
         $pageMs      = $pageTimer.ElapsedMilliseconds
 
-        Write-Host "  [STRONA $page] $lineCount linii | lacznie: $totalLines | ${pageMs}ms"
+        Write-Host "  [PAGE $page] $lineCount lines | total: $totalLines | ${pageMs}ms"
 
-        # 9. F8
         Focus-Window -Handle $hwnd
         Send-F8
-
-        # 10. Dodatkowy czas na ladowanie
         Wait-Ms 200
     }
 }
 catch {
-    Write-Host "`n  [!] Blad: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "`n  [!] Error: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-# ---------- podsumowanie ----------
 $stopwatch.Stop()
 $elapsed = $stopwatch.Elapsed
 
@@ -331,11 +296,11 @@ if ($pagesCompleted -gt 0) {
 }
 
 Write-Host "`n$('=' * 50)"
-Write-Host "  GOTOWE!" -ForegroundColor Green
-Write-Host "  Stron skopiowanych : $pagesCompleted"
-Write-Host "  Linii lacznie      : $totalLines"
-Write-Host "  Rozmiar pliku      : $fileSize B"
-Write-Host "  Czas calkowity     : $($elapsed.ToString('mm\:ss\.ff'))"
-Write-Host "  Sredni czas/strone : ${avgPerPage}s"
-Write-Host "  Zapisano do        : $absPath"
+Write-Host "  DONE!" -ForegroundColor Green
+Write-Host "  Pages scraped    : $pagesCompleted"
+Write-Host "  Total lines      : $totalLines"
+Write-Host "  File size        : $fileSize B"
+Write-Host "  Total time       : $($elapsed.ToString('mm\:ss\.ff'))"
+Write-Host "  Avg time/page    : ${avgPerPage}s"
+Write-Host "  Saved to         : $absPath"
 Write-Host "$('=' * 50)`n"
