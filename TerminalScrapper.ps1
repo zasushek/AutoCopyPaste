@@ -3,12 +3,12 @@
 .SYNOPSIS
     Terminal Screen Scraper
 .DESCRIPTION
-    Kopiuje zawartość ekranu terminala strona po stronie
-    (Ctrl+C → trim → zapis → F8 → powtórz)
+    Kopiuje zawartosc ekranu terminala strona po stronie
+    (Ctrl+C -> trim -> zapis -> F8 -> powtorz)
 #>
 
 # ═══════════════════════════════════════════════════════════
-#  .NET — dostęp do Win32 API + Clipboard
+#  .NET — dostep do Win32 API + Clipboard
 # ═══════════════════════════════════════════════════════════
 Add-Type -AssemblyName System.Windows.Forms
 
@@ -30,7 +30,7 @@ public class Win32 {
     public static extern void keybd_event(
         byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
-    public const int SW_RESTORE        = 9;
+    public const int  SW_RESTORE       = 9;
     public const byte VK_CONTROL       = 0x11;
     public const byte VK_A             = 0x41;
     public const byte VK_C             = 0x43;
@@ -43,7 +43,8 @@ public class Win32 {
 #  Funkcje pomocnicze
 # ═══════════════════════════════════════════════════════════
 
-function Focus-Window([IntPtr]$Handle) {
+function Focus-Window {
+    param([IntPtr]$Handle)
     if ([Win32]::IsIconic($Handle)) {
         [Win32]::ShowWindow($Handle, [Win32]::SW_RESTORE) | Out-Null
     }
@@ -51,38 +52,40 @@ function Focus-Window([IntPtr]$Handle) {
     Start-Sleep -Milliseconds 300
 }
 
-function Send-KeyDown([byte]$vk) {
+function Send-KeyDown {
+    param([byte]$vk)
     [Win32]::keybd_event($vk, 0, 0, [UIntPtr]::Zero)
 }
 
-function Send-KeyUp([byte]$vk) {
+function Send-KeyUp {
+    param([byte]$vk)
     [Win32]::keybd_event($vk, 0, [Win32]::KEYEVENTF_KEYUP, [UIntPtr]::Zero)
 }
 
 function Send-CtrlC {
-    Send-KeyDown ([Win32]::VK_CONTROL)
+    Send-KeyDown -vk ([Win32]::VK_CONTROL)
     Start-Sleep -Milliseconds 50
-    Send-KeyDown ([Win32]::VK_C)
+    Send-KeyDown -vk ([Win32]::VK_C)
     Start-Sleep -Milliseconds 50
-    Send-KeyUp   ([Win32]::VK_C)
-    Send-KeyUp   ([Win32]::VK_CONTROL)
+    Send-KeyUp   -vk ([Win32]::VK_C)
+    Send-KeyUp   -vk ([Win32]::VK_CONTROL)
     Start-Sleep -Milliseconds 300
 }
 
 function Send-CtrlA {
-    Send-KeyDown ([Win32]::VK_CONTROL)
+    Send-KeyDown -vk ([Win32]::VK_CONTROL)
     Start-Sleep -Milliseconds 50
-    Send-KeyDown ([Win32]::VK_A)
+    Send-KeyDown -vk ([Win32]::VK_A)
     Start-Sleep -Milliseconds 50
-    Send-KeyUp   ([Win32]::VK_A)
-    Send-KeyUp   ([Win32]::VK_CONTROL)
+    Send-KeyUp   -vk ([Win32]::VK_A)
+    Send-KeyUp   -vk ([Win32]::VK_CONTROL)
     Start-Sleep -Milliseconds 200
 }
 
 function Send-F8 {
-    Send-KeyDown ([Win32]::VK_F8)
+    Send-KeyDown -vk ([Win32]::VK_F8)
     Start-Sleep -Milliseconds 50
-    Send-KeyUp   ([Win32]::VK_F8)
+    Send-KeyUp   -vk ([Win32]::VK_F8)
     Start-Sleep -Milliseconds 200
 }
 
@@ -90,7 +93,8 @@ function Get-ClipboardText {
     try {
         $text = [System.Windows.Forms.Clipboard]::GetText()
         return $text
-    } catch {
+    }
+    catch {
         return ""
     }
 }
@@ -98,7 +102,8 @@ function Get-ClipboardText {
 function Clear-ClipboardContent {
     try {
         [System.Windows.Forms.Clipboard]::Clear()
-    } catch {}
+    }
+    catch { }
 }
 
 function Trim-Lines {
@@ -113,7 +118,8 @@ function Trim-Lines {
         return ""
     }
 
-    $trimmed = $lines[$Top..($lines.Count - $Bottom - 1)]
+    $endIndex = $lines.Count - $Bottom - 1
+    $trimmed = $lines[$Top..$endIndex]
     return ($trimmed -join "`n")
 }
 
@@ -136,7 +142,9 @@ function Select-TargetWindow {
 
     for ($i = 0; $i -lt $procs.Count; $i++) {
         $title = $procs[$i].MainWindowTitle
-        if ($title.Length -gt 52) { $title = $title.Substring(0, 49) + "..." }
+        if ($title.Length -gt 52) {
+            $title = $title.Substring(0, 49) + "..."
+        }
         $num = ($i + 1).ToString().PadLeft(3)
         Write-Host "  $num | $title"
     }
@@ -144,11 +152,11 @@ function Select-TargetWindow {
     Write-Host "$('=' * 60)"
 
     while ($true) {
-        $input = Read-Host "`n  Podaj numer okna"
-        $choice = 0
-        if ([int]::TryParse($input, [ref]$choice)) {
-            if ($choice -ge 1 -and $choice -le $procs.Count) {
-                return $procs[$choice - 1]
+        $userChoice = Read-Host "`n  Podaj numer okna"
+        $choiceNum = 0
+        if ([int]::TryParse($userChoice, [ref]$choiceNum)) {
+            if ($choiceNum -ge 1 -and $choiceNum -le $procs.Count) {
+                return $procs[$choiceNum - 1]
             }
         }
         Write-Host "  -> Wybierz liczbe 1-$($procs.Count)" -ForegroundColor Yellow
@@ -159,14 +167,12 @@ function Select-TargetWindow {
 #  MAIN
 # ═══════════════════════════════════════════════════════════
 
-Write-Host @"
-
-  +================================================+
-  |       TERMINAL SCREEN SCRAPER (PowerShell)      |
-  |       Ctrl+C -> trim -> save -> F8 -> repeat    |
-  +================================================+
-
-"@ -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  +================================================+" -ForegroundColor Cyan
+Write-Host "  |       TERMINAL SCREEN SCRAPER (PowerShell)      |" -ForegroundColor Cyan
+Write-Host "  |       Ctrl+C -> trim -> save -> F8 -> repeat    |" -ForegroundColor Cyan
+Write-Host "  +================================================+" -ForegroundColor Cyan
+Write-Host ""
 
 # ---------- konfiguracja ----------
 
@@ -176,23 +182,41 @@ $hwnd = $proc.MainWindowHandle
 Write-Host "`n  Wybrano: << $($proc.MainWindowTitle) >>" -ForegroundColor Green
 
 $outputFile = Read-Host "  Nazwa pliku wyjsciowego [output.txt]"
-if ([string]::IsNullOrWhiteSpace($outputFile)) { $outputFile = "output.txt" }
+if ([string]::IsNullOrWhiteSpace($outputFile)) {
+    $outputFile = "output.txt"
+}
 
-$useCtrlA = Read-Host "  Wysylac Ctrl+A przed Ctrl+C? (t/n) [n]"
-$useCtrlA = $useCtrlA -in @("t", "y", "tak", "yes")
+$useCtrlAInput = Read-Host "  Wysylac Ctrl+A przed Ctrl+C? (t/n) [n]"
+$useCtrlA = $useCtrlAInput -in @("t", "y", "tak", "yes")
 
 $topTrimInput = Read-Host "  Ile linii usuwac z gory?  [3]"
-$topTrim = if ($topTrimInput) { [int]$topTrimInput } else { 3 }
+if ([string]::IsNullOrWhiteSpace($topTrimInput)) {
+    $topTrim = 3
+} else {
+    $topTrim = [int]$topTrimInput
+}
 
 $bottomTrimInput = Read-Host "  Ile linii usuwac z dolu?  [3]"
-$bottomTrim = if ($bottomTrimInput) { [int]$bottomTrimInput } else { 3 }
+if ([string]::IsNullOrWhiteSpace($bottomTrimInput)) {
+    $bottomTrim = 3
+} else {
+    $bottomTrim = [int]$bottomTrimInput
+}
 
 $delayInput = Read-Host "  Opoznienie miedzy stronami w sek. [1.0]"
-$delay = if ($delayInput) { [double]$delayInput } else { 1.0 }
+if ([string]::IsNullOrWhiteSpace($delayInput)) {
+    $delay = 1.0
+} else {
+    $delay = [double]$delayInput
+}
 
 Write-Host "`n$('-' * 50)"
 Write-Host "  Plik wyjsciowy : $outputFile"
-Write-Host "  Ctrl+A         : $(if ($useCtrlA) {'TAK'} else {'NIE'})"
+if ($useCtrlA) {
+    Write-Host "  Ctrl+A         : TAK"
+} else {
+    Write-Host "  Ctrl+A         : NIE"
+}
 Write-Host "  Trim gora/dol  : $topTrim / $bottomTrim"
 Write-Host "  Opoznienie     : ${delay}s"
 Write-Host "$('-' * 50)"
@@ -203,8 +227,8 @@ Read-Host "`n  Nacisnij ENTER aby rozpoczac"
 "" | Set-Content -Path $outputFile -Encoding UTF8 -NoNewline
 
 # ---------- petla ----------
-$page           = 0
-$totalLines     = 0
+$page            = 0
+$totalLines      = 0
 $previousContent = $null
 
 Write-Host "`n  [START] Rozpoczynam kopiowanie...`n" -ForegroundColor Green
@@ -233,7 +257,7 @@ try {
         $rawText = Get-ClipboardText
 
         if ([string]::IsNullOrWhiteSpace($rawText)) {
-            Write-Host "  [STRONA $page] Schowek pusty — STOP" -ForegroundColor Yellow
+            Write-Host "  [STRONA $page] Schowek pusty - STOP" -ForegroundColor Yellow
             break
         }
 
@@ -242,13 +266,13 @@ try {
 
         # 6. Pusta tresc po trimie?
         if ([string]::IsNullOrWhiteSpace($trimmed)) {
-            Write-Host "  [STRONA $page] Po przyciu linii tresc pusta — STOP" -ForegroundColor Yellow
+            Write-Host "  [STRONA $page] Po przyciu linii tresc pusta - STOP" -ForegroundColor Yellow
             break
         }
 
         # 7. Duplikat = koniec scrolla
         if ($trimmed -eq $previousContent) {
-            Write-Host "  [STRONA $page] Tresc identyczna z poprzednia strona — STOP" -ForegroundColor Yellow
+            Write-Host "  [STRONA $page] Tresc identyczna z poprzednia strona - STOP" -ForegroundColor Yellow
             break
         }
         $previousContent = $trimmed
@@ -274,9 +298,13 @@ catch {
 }
 
 # ---------- podsumowanie ----------
-$absPath  = (Resolve-Path $outputFile -ErrorAction SilentlyContinue).Path
-if (-not $absPath) { $absPath = $outputFile }
-$fileSize = if (Test-Path $outputFile) { (Get-Item $outputFile).Length } else { 0 }
+$absPath = $outputFile
+if (Test-Path $outputFile) {
+    $absPath  = (Resolve-Path $outputFile).Path
+    $fileSize = (Get-Item $outputFile).Length
+} else {
+    $fileSize = 0
+}
 
 Write-Host "`n$('=' * 50)"
 Write-Host "  GOTOWE!" -ForegroundColor Green
