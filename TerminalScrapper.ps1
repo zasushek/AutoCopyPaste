@@ -86,15 +86,16 @@ function Send-F8 {
 function Get-ClipboardText {
     try {
         return [System.Windows.Forms.Clipboard]::GetText()
-    }
-    catch {
+    } catch {
         return ""
     }
 }
 
 function Clear-ClipboardContent {
-    try { [System.Windows.Forms.Clipboard]::Clear() }
-    catch { }
+    try {
+        [System.Windows.Forms.Clipboard]::Clear()
+    } catch {
+    }
 }
 
 function Trim-Lines {
@@ -104,7 +105,9 @@ function Trim-Lines {
         [int]$Bottom = 3
     )
     $lines = $Text -split "`r?`n"
-    if ($lines.Count -le ($Top + $Bottom)) { return "" }
+    if ($lines.Count -le ($Top + $Bottom)) {
+        return ""
+    }
     $trimmed = $lines[$Top..($lines.Count - $Bottom - 1)]
     return ($trimmed -join "`n")
 }
@@ -146,10 +149,6 @@ function Select-TargetWindow {
     }
 }
 
-# ═══════════════════════════════════════════════════════════
-#  MAIN
-# ═══════════════════════════════════════════════════════════
-
 Write-Host ""
 Write-Host "  +================================================+" -ForegroundColor Cyan
 Write-Host "  |       TERMINAL SCREEN SCRAPER (PowerShell)      |" -ForegroundColor Cyan
@@ -185,7 +184,7 @@ if ([string]::IsNullOrWhiteSpace($bottomTrimInput)) {
 }
 
 Write-Host ""
-Write-Host "  SPEED — delay multiplier:" -ForegroundColor Cyan
+Write-Host "  SPEED - delay multiplier:" -ForegroundColor Cyan
 Write-Host "    1.0 = normal (default)"
 Write-Host "    0.5 = 2x faster"
 Write-Host "    0.2 = 5x faster (aggressive)"
@@ -199,19 +198,19 @@ if ([string]::IsNullOrWhiteSpace($speedInput)) {
     $script:SpeedMultiplier = [Math]::Max(0.05, [double]$speedInput)
 }
 
-$baseTimeMs = 150 + 30 + 30 + 150 + 50 + 150 + 30 + 100 + 150 + 100 + 200
+$baseTimeMs = 940
 $actualTimeMs = [int]($baseTimeMs * $script:SpeedMultiplier)
 
 Write-Host "`n$('-' * 50)"
-Write-Host "  Output file    : $outputFile"
+Write-Host "  Output file      : $outputFile"
 if ($useCtrlA) {
-    Write-Host "  Ctrl+A         : YES"
+    Write-Host "  Ctrl+A           : YES"
 } else {
-    Write-Host "  Ctrl+A         : NO"
+    Write-Host "  Ctrl+A           : NO"
 }
-Write-Host "  Trim top/bottom: $topTrim / $bottomTrim"
-Write-Host "  Speed multiplier: $($script:SpeedMultiplier)x"
-Write-Host "  ~time/page     : ${actualTimeMs}ms (~$([Math]::Round($actualTimeMs/1000, 2))s)"
+Write-Host "  Trim top/bottom  : $topTrim / $bottomTrim"
+Write-Host "  Speed multiplier : $($script:SpeedMultiplier)x"
+Write-Host "  ~time/page       : ~${actualTimeMs}ms"
 Write-Host "$('-' * 50)"
 
 Read-Host "`n  Press ENTER to start"
@@ -226,13 +225,17 @@ $stopwatch       = [System.Diagnostics.Stopwatch]::StartNew()
 Write-Host "`n  [START] Scraping started...`n" -ForegroundColor Green
 
 try {
+
     while ($true) {
+
         $page++
         $pageTimer = [System.Diagnostics.Stopwatch]::StartNew()
 
         Focus-Window -Handle $hwnd
 
-        if ($useCtrlA) { Send-CtrlA }
+        if ($useCtrlA) {
+            Send-CtrlA
+        }
 
         Clear-ClipboardContent
         Wait-Ms 50
@@ -243,19 +246,19 @@ try {
         $rawText = Get-ClipboardText
 
         if ([string]::IsNullOrWhiteSpace($rawText)) {
-            Write-Host "  [PAGE $page] Clipboard empty — STOP" -ForegroundColor Yellow
+            Write-Host "  [PAGE $page] Clipboard empty - STOP" -ForegroundColor Yellow
             break
         }
 
         $trimmed = Trim-Lines -Text $rawText -Top $topTrim -Bottom $bottomTrim
 
         if ([string]::IsNullOrWhiteSpace($trimmed)) {
-            Write-Host "  [PAGE $page] Content empty after trimming — STOP" -ForegroundColor Yellow
+            Write-Host "  [PAGE $page] Content empty after trimming - STOP" -ForegroundColor Yellow
             break
         }
 
         if ($trimmed -eq $previousContent) {
-            Write-Host "  [PAGE $page] Duplicate content detected — STOP" -ForegroundColor Yellow
+            Write-Host "  [PAGE $page] Duplicate content detected - STOP" -ForegroundColor Yellow
             break
         }
         $previousContent = $trimmed
@@ -271,28 +274,27 @@ try {
         Focus-Window -Handle $hwnd
         Send-F8
         Wait-Ms 200
+
     }
-}
-catch {
+
+} catch {
     Write-Host "`n  [!] Error: $($_.Exception.Message)" -ForegroundColor Red
 }
 
 $stopwatch.Stop()
-$elapsed = $stopwatch.Elapsed
+$totalSeconds = [Math]::Round($stopwatch.Elapsed.TotalSeconds, 2)
 
 $absPath = $outputFile
+$fileSize = 0
 if (Test-Path $outputFile) {
     $absPath  = (Resolve-Path $outputFile).Path
     $fileSize = (Get-Item $outputFile).Length
-} else {
-    $fileSize = 0
 }
 
 $pagesCompleted = [Math]::Max(0, $page - 1)
+$avgPerPage = 0
 if ($pagesCompleted -gt 0) {
-    $avgPerPage = [Math]::Round($elapsed.TotalSeconds / $pagesCompleted, 2)
-} else {
-    $avgPerPage = 0
+    $avgPerPage = [Math]::Round($totalSeconds / $pagesCompleted, 2)
 }
 
 Write-Host "`n$('=' * 50)"
@@ -300,7 +302,7 @@ Write-Host "  DONE!" -ForegroundColor Green
 Write-Host "  Pages scraped    : $pagesCompleted"
 Write-Host "  Total lines      : $totalLines"
 Write-Host "  File size        : $fileSize B"
-Write-Host "  Total time       : $($elapsed.ToString('mm\:ss\.ff'))"
+Write-Host "  Total time       : ${totalSeconds}s"
 Write-Host "  Avg time/page    : ${avgPerPage}s"
 Write-Host "  Saved to         : $absPath"
 Write-Host "$('=' * 50)`n"
