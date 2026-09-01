@@ -1,15 +1,5 @@
 #Requires -Version 5.1
-<#
-.SYNOPSIS
-    Terminal Screen Scraper
-.DESCRIPTION
-    Kopiuje zawartosc ekranu terminala strona po stronie
-    (Ctrl+C -> trim -> zapis -> F8 -> powtorz)
-#>
 
-# ═══════════════════════════════════════════════════════════
-#  .NET — dostep do Win32 API + Clipboard
-# ═══════════════════════════════════════════════════════════
 Add-Type -AssemblyName System.Windows.Forms
 
 Add-Type @"
@@ -40,6 +30,17 @@ public class Win32 {
 "@
 
 # ═══════════════════════════════════════════════════════════
+#  Globalna zmienna predkosci
+# ═══════════════════════════════════════════════════════════
+$script:SpeedMultiplier = 1.0
+
+function Wait-Ms {
+    param([int]$BaseMs)
+    $actual = [Math]::Max(10, [int]($BaseMs * $script:SpeedMultiplier))
+    Start-Sleep -Milliseconds $actual
+}
+
+# ═══════════════════════════════════════════════════════════
 #  Funkcje pomocnicze
 # ═══════════════════════════════════════════════════════════
 
@@ -49,7 +50,7 @@ function Focus-Window {
         [Win32]::ShowWindow($Handle, [Win32]::SW_RESTORE) | Out-Null
     }
     [Win32]::SetForegroundWindow($Handle) | Out-Null
-    Start-Sleep -Milliseconds 300
+    Wait-Ms 150
 }
 
 function Send-KeyDown {
@@ -64,29 +65,29 @@ function Send-KeyUp {
 
 function Send-CtrlC {
     Send-KeyDown -vk ([Win32]::VK_CONTROL)
-    Start-Sleep -Milliseconds 50
+    Wait-Ms 30
     Send-KeyDown -vk ([Win32]::VK_C)
-    Start-Sleep -Milliseconds 50
+    Wait-Ms 30
     Send-KeyUp   -vk ([Win32]::VK_C)
     Send-KeyUp   -vk ([Win32]::VK_CONTROL)
-    Start-Sleep -Milliseconds 300
+    Wait-Ms 150
 }
 
 function Send-CtrlA {
     Send-KeyDown -vk ([Win32]::VK_CONTROL)
-    Start-Sleep -Milliseconds 50
+    Wait-Ms 30
     Send-KeyDown -vk ([Win32]::VK_A)
-    Start-Sleep -Milliseconds 50
+    Wait-Ms 30
     Send-KeyUp   -vk ([Win32]::VK_A)
     Send-KeyUp   -vk ([Win32]::VK_CONTROL)
-    Start-Sleep -Milliseconds 200
+    Wait-Ms 100
 }
 
 function Send-F8 {
     Send-KeyDown -vk ([Win32]::VK_F8)
-    Start-Sleep -Milliseconds 50
+    Wait-Ms 30
     Send-KeyUp   -vk ([Win32]::VK_F8)
-    Start-Sleep -Milliseconds 200
+    Wait-Ms 100
 }
 
 function Get-ClipboardText {
@@ -113,11 +114,9 @@ function Trim-Lines {
         [int]$Bottom = 3
     )
     $lines = $Text -split "`r?`n"
-
     if ($lines.Count -le ($Top + $Bottom)) {
         return ""
     }
-
     $endIndex = $lines.Count - $Bottom - 1
     $trimmed = $lines[$Top..$endIndex]
     return ($trimmed -join "`n")
@@ -203,12 +202,24 @@ if ([string]::IsNullOrWhiteSpace($bottomTrimInput)) {
     $bottomTrim = [int]$bottomTrimInput
 }
 
-$delayInput = Read-Host "  Opoznienie miedzy stronami w sek. [1.0]"
-if ([string]::IsNullOrWhiteSpace($delayInput)) {
-    $delay = 1.0
+Write-Host ""
+Write-Host "  PREDKOSC - mnoznik opoznien:" -ForegroundColor Cyan
+Write-Host "    1.0 = normalna (domyslna)"
+Write-Host "    0.5 = 2x szybciej"
+Write-Host "    0.2 = 5x szybciej (agresywne)"
+Write-Host "    2.0 = 2x wolniej (wolny terminal)"
+Write-Host ""
+
+$speedInput = Read-Host "  Mnoznik predkosci [1.0]"
+if ([string]::IsNullOrWhiteSpace($speedInput)) {
+    $script:SpeedMultiplier = 1.0
 } else {
-    $delay = [double]$delayInput
+    $script:SpeedMultiplier = [Math]::Max(0.05, [double]$speedInput)
 }
+
+# oblicz szacowany czas na strone
+$baseTimeMs = 150 + 30 + 30 + 150 + 50 + 150 + 30 + 100 + 150 + 100
+$actualTimeMs = [int]($baseTimeMs * $script:SpeedMultiplier)
 
 Write-Host "`n$('-' * 50)"
 Write-Host "  Plik wyjsciowy : $outputFile"
@@ -218,7 +229,8 @@ if ($useCtrlA) {
     Write-Host "  Ctrl+A         : NIE"
 }
 Write-Host "  Trim gora/dol  : $topTrim / $bottomTrim"
-Write-Host "  Opoznienie     : ${delay}s"
+Write-Host "  Mnoznik predk.  : $($script:SpeedMultiplier)x"
+Write-Host "  ~czas/strone   : $($actualTimeMs)ms (~$([Math]::Round($actualTimeMs/1000, 2))s)"
 Write-Host "$('-' * 50)"
 
 Read-Host "`n  Nacisnij ENTER aby rozpoczac"
@@ -230,16 +242,17 @@ Read-Host "`n  Nacisnij ENTER aby rozpoczac"
 $page            = 0
 $totalLines      = 0
 $previousContent = $null
+$stopwatch       = [System.Diagnostics.Stopwatch]::StartNew()
 
 Write-Host "`n  [START] Rozpoczynam kopiowanie...`n" -ForegroundColor Green
 
 try {
     while ($true) {
         $page++
+        $pageTimer = [System.Diagnostics.Stopwatch]::StartNew()
 
         # 1. Aktywuj okno
         Focus-Window -Handle $hwnd
-        Start-Sleep -Milliseconds 200
 
         # 2. Opcjonalnie Ctrl+A
         if ($useCtrlA) {
@@ -248,10 +261,10 @@ try {
 
         # 3. Wyczysc schowek + Ctrl+C
         Clear-ClipboardContent
-        Start-Sleep -Milliseconds 100
+        Wait-Ms 50
 
         Send-CtrlC
-        Start-Sleep -Milliseconds 400
+        Wait-Ms 200
 
         # 4. Odczytaj schowek
         $rawText = Get-ClipboardText
@@ -264,15 +277,15 @@ try {
         # 5. Trim
         $trimmed = Trim-Lines -Text $rawText -Top $topTrim -Bottom $bottomTrim
 
-        # 6. Pusta tresc po trimie?
+        # 6. Pusta tresc?
         if ([string]::IsNullOrWhiteSpace($trimmed)) {
             Write-Host "  [STRONA $page] Po przyciu linii tresc pusta - STOP" -ForegroundColor Yellow
             break
         }
 
-        # 7. Duplikat = koniec scrolla
+        # 7. Duplikat?
         if ($trimmed -eq $previousContent) {
-            Write-Host "  [STRONA $page] Tresc identyczna z poprzednia strona - STOP" -ForegroundColor Yellow
+            Write-Host "  [STRONA $page] Tresc identyczna z poprzednia - STOP" -ForegroundColor Yellow
             break
         }
         $previousContent = $trimmed
@@ -282,15 +295,16 @@ try {
 
         $lineCount   = ($trimmed -split "`n").Count
         $totalLines += $lineCount
-        Write-Host "  [STRONA $page] Zapisano $lineCount linii  (lacznie: $totalLines)"
+        $pageMs      = $pageTimer.ElapsedMilliseconds
 
-        # 9. F8 — przewiniecie
+        Write-Host "  [STRONA $page] $lineCount linii | lacznie: $totalLines | ${pageMs}ms"
+
+        # 9. F8
         Focus-Window -Handle $hwnd
-        Start-Sleep -Milliseconds 150
         Send-F8
 
-        # 10. Czekaj
-        Start-Sleep -Seconds $delay
+        # 10. Dodatkowy czas na ladowanie
+        Wait-Ms 200
     }
 }
 catch {
@@ -298,6 +312,9 @@ catch {
 }
 
 # ---------- podsumowanie ----------
+$stopwatch.Stop()
+$elapsed = $stopwatch.Elapsed
+
 $absPath = $outputFile
 if (Test-Path $outputFile) {
     $absPath  = (Resolve-Path $outputFile).Path
@@ -306,10 +323,19 @@ if (Test-Path $outputFile) {
     $fileSize = 0
 }
 
+$pagesCompleted = [Math]::Max(0, $page - 1)
+if ($pagesCompleted -gt 0) {
+    $avgPerPage = [Math]::Round($elapsed.TotalSeconds / $pagesCompleted, 2)
+} else {
+    $avgPerPage = 0
+}
+
 Write-Host "`n$('=' * 50)"
 Write-Host "  GOTOWE!" -ForegroundColor Green
-Write-Host "  Stron skopiowanych : $($page - 1)"
+Write-Host "  Stron skopiowanych : $pagesCompleted"
 Write-Host "  Linii lacznie      : $totalLines"
 Write-Host "  Rozmiar pliku      : $fileSize B"
+Write-Host "  Czas calkowity     : $($elapsed.ToString('mm\:ss\.ff'))"
+Write-Host "  Sredni czas/strone : ${avgPerPage}s"
 Write-Host "  Zapisano do        : $absPath"
 Write-Host "$('=' * 50)`n"
